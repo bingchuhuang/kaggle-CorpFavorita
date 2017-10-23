@@ -2,7 +2,6 @@ import xgboost as xgb
 import pandas as pd
 import numpy as np
 
-
 def preprocess(df):
     df['date'] = pd.to_datetime(df['date'])
     df['year'] = df['date'].apply(lambda x: x.year)
