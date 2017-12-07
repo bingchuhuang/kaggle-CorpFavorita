@@ -1,6 +1,19 @@
 import xgboost as xgb
 import numpy as np
 import pandas as pd
+import operator
+from matplotlib import pylab as plt
+
+
+'''
+Evaluation function
+'''
+
+def NWRMSLE(y, pred, weights):
+    y = np.array(y).clip(0,np.max(y))
+    pred = np.array(pred).clip(0,np.max(pred))
+    weighted_errors = weights * np.square(np.log1p(pred) - np.log1p(y))
+    return np.sqrt(np.sum(weighted_errors)/np.sum(weights))
 
 '''
 XGBoost
@@ -17,6 +30,18 @@ def run_xgb(par_list, df_train, y_train, output_fname):
     )
     bst.save_model(output_fname)
 
+    importance = bst.get_fscore()
+    importance = sorted(importance.items(), key=operator.itemgetter(1))
+    df = pd.DataFrame(importance, columns=['feature', 'fscore'])
+    df['fscore'] = df['fscore'] / df['fscore'].sum()
+    plt.figure()
+    df.plot()
+    df.plot(kind='barh', x='feature', y='fscore', legend=False, figsize=(6, 10))
+    plt.title('XGBoost Feature Importance')
+    plt.xlabel('relative importance')
+    plt.tight_layout()
+    plt.gcf().savefig('feature_importance_xgb.png')
+
 def evaluate_xgb(saved_model_fname, df_cv, y_cv):
     dcv = xgb.DMatrix(df_cv, label=y_cv)
 
@@ -30,8 +55,11 @@ def evaluate_xgb(saved_model_fname, df_cv, y_cv):
     logdiff = logdiff[np.isfinite(logdiff)]
     nwrmsle_nowt = np.sqrt(np.sum(logdiff**2)/logdiff.shape[0])
     print('nwrmsle_nowt = ', nwrmsle_nowt)
-    #score = np.sqrt((((y_cv - preds)/y_cv)**2).sum())
-    #print('score = ', score)
+
+    weights = df_cv['perishable']*0.25 + 1
+
+    nwrmsle_func = NWRMSLE(yt,preds,weights)
+    print('nwrmsle_func = ', nwrmsle_func)
 
 def predict_xgb(saved_model_fname, df_test):
     dtest = xgb.DMatrix(df_test)
