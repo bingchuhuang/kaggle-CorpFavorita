@@ -17,7 +17,7 @@ def run_feature_extraction(name=None):
     os.system(cmd)
 
 @click.command()
-@click.option('--runtype', default=None, type=str, help='PO/FO, preprocess/feature only.')
+@click.option('--runtype', default=None, type=str, help='P/F, preprocess/feature')
 @click.option('--fname', default=None, type=str, help='single feature name')
 @click.option('--email/--no-email', default=False)
 def main(runtype, fname, email):
@@ -26,14 +26,18 @@ def main(runtype, fname, email):
         print('Error: No input run type!')
         os._exit(0)
     else:
-        assert runtype in {'PO','FO','CO','FC'} 
+        assert runtype in {'P','F','PF'} 
 
     print('runtype = ', runtype)
 
-    if runtype == 'PO':
+    if runtype == 'P':
         run_data_preprocess()
 
-    if runtype == 'FO':
+    if runtype == 'F':
+        run_feature_extraction(fname)
+    
+    if runtype == 'PF':
+        run_data_preprocess()
         run_feature_extraction(fname)
 
     print('run_features.py done!')
