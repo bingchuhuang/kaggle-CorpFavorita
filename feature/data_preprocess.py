@@ -22,43 +22,6 @@ import time
 from datetime import date, datetime, timedelta
 from scipy import stats
 
-dict_dtypes = {
-    'id':np.int32,
-    'family':np.int16,
-    'class':np.int16,
-    'city':np.int16,
-    'state':np.int8,
-    'stype':np.int8,
-    'type':np.int8,
-    'locale':np.int8,
-    'locale_name':np.int8,
-    'description':np.int8,
-    'humidity':np.float16,
-    'temperatureMin':np.float16,
-    'temperatureMax':np.float16,
-    'year':np.int16,
-    'doy':np.int16,
-    'woy':np.int8,
-    'transferred':np.int8,
-    'onpromotion':np.int8,
-    'dow':np.int8,
-    'dom':np.int8,
-    'holidays_thisweek':np.int8,
-    'holidays_lastweek':np.int8,
-    'holidays_nextweek':np.int8,
-    'day_before_holiday_national':np.int16,
-    'day_after_holiday_national':np.int16,
-    'day_before_holiday_regional':np.int16,
-    'day_after_holiday_regional':np.int16,
-    'day_before_holiday_local':np.int16,
-    'day_after_holiday_local':np.int16
-}
-
-def set_dtype(df,dict_dtypes):
-    for name in df.columns:
-        if name in dict_dtypes.keys():
-            df[name] = df[name].astype(dict_dtypes[name])
-
 def dump_df(df,path_name):
     out = pickle.dumps(df)
     n_bytes = len(out)
@@ -162,7 +125,7 @@ def process_train():
         print('Read train iteration is stopped.')
     
     df_train = df_train.fillna(0)
-    set_dtype(df_train, dict_dtypes)
+    config.set_dtype(df_train)
     print(df_train.info())
     
     path_name = path.join(config.proc_data_path,config.fname_train+'.pkl')
@@ -180,7 +143,7 @@ def process_test():
         print('Read test iteration is stopped.')
  
     df_test = df_test.fillna(0)
-    set_dtype(df_test, dict_dtypes)
+    config.set_dtype(df_test)
     print(df_test.info())
 
     path_name = path.join(config.proc_data_path,config.fname_test+'.pkl')
@@ -228,12 +191,12 @@ def process_info():
 
     df_weather = pd.merge(df_weather, df_stores, on='city', how='left')
     
-    set_dtype(df_oil, dict_dtypes)
-    set_dtype(df_items, dict_dtypes)
-    set_dtype(df_stores, dict_dtypes)
-    set_dtype(df_transactions, dict_dtypes)
-    set_dtype(df_holidays, dict_dtypes)
-    set_dtype(df_weather, dict_dtypes)
+    config.set_dtype(df_oil)
+    config.set_dtype(df_items)
+    config.set_dtype(df_stores)
+    config.set_dtype(df_transactions)
+    config.set_dtype(df_holidays)
+    config.set_dtype(df_weather)
     
     print(df_oil.info())
     print(df_items.info())
@@ -270,8 +233,8 @@ def process_info():
     df_holiday_counts = pd.merge(df_holiday_counts, df_stores, on=['city','state'], how='left')
     df_holiday_counts = df_holiday_counts.fillna(0)
 
-    set_dtype(df_holiday_counts, dict_dtypes)
-    set_dtype(df_holidays, dict_dtypes)
+    config.set_dtype(df_holiday_counts)
+    config.set_dtype(df_holidays)
 
     print('df_holiday_counts:')
     #print(df_holiday_counts.head(50))
