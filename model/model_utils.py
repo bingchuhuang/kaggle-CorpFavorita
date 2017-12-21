@@ -3,6 +3,8 @@ import numpy as np
 import pandas as pd
 import operator
 from matplotlib import pylab as plt
+import sklearn.metrics as skl_metrics
+import math
 
 
 '''
@@ -15,13 +17,24 @@ def NWRMSLE(y, pred, weights):
     weighted_errors = weights * np.square(np.log1p(pred) - np.log1p(y))
     return np.sqrt(np.sum(weighted_errors)/np.sum(weights))
 
+def NWRMSLE_log(y, pred, weights):
+    y = np.array(y).clip(0,np.max(y))
+    pred = np.array(pred).clip(0,np.max(pred))
+    weighted_errors = weights * np.square(pred - y)
+    return np.sqrt(np.sum(weighted_errors)/np.sum(weights))
+
+
+def NWRMSLE_sklearn(y, pred, weights):
+    err2 = skl_metrics.mean_squared_log_error(y, pred, sample_weight=weights)
+    return math.sqrt(err2)
+
 '''
 XGBoost
 '''
 
-def run_xgb(par_list, df_train, y_train, output_fname):
+def run_xgb(par_list, nround, df_train, y_train, output_fname):
     param = par_list
-    num_round = 20
+    num_round = 100
     dtrain = xgb.DMatrix(df_train, label=y_train)
     bst = xgb.train(
         param,
@@ -53,13 +66,18 @@ def evaluate_xgb(saved_model_fname, df_cv, y_cv):
     yt = yt.astype(float)
     logdiff = np.log(preds+1.) - np.log(yt+1.)
     logdiff = logdiff[np.isfinite(logdiff)]
-    nwrmsle_nowt = np.sqrt(np.sum(logdiff**2)/logdiff.shape[0])
-    print('nwrmsle_nowt = ', nwrmsle_nowt)
+    #nwrmsle_nowt = np.sqrt(np.sum(logdiff**2)/logdiff.shape[0])
+    #print('nwrmsle_nowt = ', nwrmsle_nowt)
 
-    weights = df_cv['perishable']*0.25 + 1
+    weights = df_cv['perishable'].astype(float)*0.25 + 1.
 
-    nwrmsle_func = NWRMSLE(yt,preds,weights)
-    print('nwrmsle_func = ', nwrmsle_func)
+    #nwrmsle_func = NWRMSLE(yt,preds,weights)
+    #print('nwrmsle_func = ', nwrmsle_func)
+    
+    nwrmsle_log = NWRMSLE_log(yt,preds,weights)
+    print('nwrmsle_log = ', nwrmsle_log)
+
+    return preds
 
 def predict_xgb(saved_model_fname, df_test):
     dtest = xgb.DMatrix(df_test)
