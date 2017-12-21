@@ -12,7 +12,6 @@ __author__
 
 import sys
 import pickle
-import pandas as pd
 sys.path.append('../')
 from config import config
 from feature_list import feature_list
@@ -22,6 +21,7 @@ from datetime import date
 
 def dump_feature(df, func, feature,ftype):
     X = func(df,feature)
+    config.set_dtype(X)
     with open(path.join(config.feature_path,ftype+'_'+feature+'.pkl'),'wb') as f:
         pickle.dump(X, f, -1)
 
@@ -32,7 +32,7 @@ def dump_feature_test(df, df_train, func, feature, ftype, isFromTrain):
         X = func(df,df_train,feature)
     else:
         X = func(df,feature)
-
+    config.set_dtype(X)
     with open(path.join(config.feature_path,ftype+'_'+feature+'.pkl'),'wb') as f:
         pickle.dump(X, f, -1)
 

@@ -117,14 +117,33 @@ def process_train():
 
     print('processing train data...')
     dict_dtype_train={'id':np.int32,'date':object,'store_nbr':np.int8,'item_nbr':np.int32,'unit_sales':np.float32,'onpromotion':bool}
-    reader = pd.read_csv(path.join(config.data_path,config.fname_train+'.csv'), dtype=dict_dtype_train, 
-                         usecols=range(0,6), iterator=True)
+    reader = pd.read_csv(path.join(config.data_path,config.fname_train+'.csv'), dtype=dict_dtype_train, parse_dates=['date'],
+                         usecols=range(0,6), skiprows=range(1,107758057), iterator=True) #skip date before 2017-03-01
     try:
         df_train = reader.get_chunk(1e8)
     except StopIteration:
         print('Read train iteration is stopped.')
-    
-    df_train = df_train.fillna(0)
+   
+    # creating records for all items, in all markets on all dates #from Paulo Pinto:
+    # https://www.kaggle.com/paulorzp/log-means-and-medians-to-predict-new-itens-0-546/code
+    # for correct calculation of daily unit sales averages.
+    u_dates = df_train.date.unique()
+    u_stores = df_train.store_nbr.unique()
+    u_items = df_train.item_nbr.unique()
+    df_train.set_index(["date", "store_nbr", "item_nbr"], inplace=True)
+    df_train = df_train.reindex(
+            pd.MultiIndex.from_product(
+                        (u_dates, u_stores, u_items),
+                        names=["date", "store_nbr", "item_nbr"]
+                    )
+    )
+
+    del u_dates, u_stores, u_items
+
+    df_train.fillna(0,inplace=True)
+    df_train.reset_index(inplace=True)
+    df_train.loc[(df_train.unit_sales<0),'unit_sales'] = 0 # remove return sales 
+    df_train['unit_sales'] =  df_train['unit_sales'].apply(pd.np.log1p) #log(1+x)
     config.set_dtype(df_train)
     print(df_train.info())
     
@@ -136,7 +155,7 @@ def process_test():
 
     print('processing test data...')
     dict_dtype_test={'id':np.int32,'date':object,'store_nbr':np.int8,'item_nbr':np.int32,'onpromotion':bool}
-    reader_test = pd.read_csv(path.join(config.data_path,config.fname_test+'.csv'),  dtype=dict_dtype_test, usecols=range(0,5), iterator=True)
+    reader_test = pd.read_csv(path.join(config.data_path,config.fname_test+'.csv'),  dtype=dict_dtype_test, parse_dates=['date'], usecols=range(0,5), iterator=True)
     try:
         df_test = reader_test.get_chunk(1e8)
     except StopIteration:

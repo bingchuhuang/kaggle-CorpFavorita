@@ -11,7 +11,7 @@ __author__
 '''
 
 import pandas as pd
-from datetime import date
+from datetime import date, timedelta
 import numpy as np
 from scipy import stats
 import sys
@@ -19,6 +19,7 @@ sys.path.append('../')
 from config import config
 import pickle
 from os import path
+import gc
 
 # read directly
 def simple_read(df, feature):
@@ -58,6 +59,8 @@ def store_feature(df, feature):
     with open(path.join(config.proc_data_path,config.fname_stores+'.pkl'),'rb') as f:
         df_stores = pickle.load(f)
     df_feature = pd.merge(df[['store_nbr']], df_stores, on='store_nbr', how='left')
+    print(df_feature.info())
+    print(df_feature.head(5))
     return df_feature[feature]
 
 # item
@@ -92,38 +95,51 @@ def transaction_feature(df, feature):
     with open(path.join(config.proc_data_path,config.fname_transactions+'.pkl'),'rb') as f:
         df_transactions = pickle.load(f)
     df_transactions['date'] = pd.to_datetime(df_transactions['date'])
-    df_transactions['year'] = df_transactions['date'].dt.year.astype(np.int16)
-    df_transactions['mon'] = df_transactions['date'].dt.month.astype(np.int8)
-    df['year'] = pd.to_datetime(df['date']).dt.year.astype(np.int16)
-    df['mon'] = pd.to_datetime(df['date']).dt.month.astype(np.int8)
+    df['date'] = pd.to_datetime(df['date'])
 
-    grouped  = df_transactions.groupby(['year','mon','store_nbr'])
+    period = 'dow'
+    if 'dow' in feature:
+        df_transactions['dow'] = df_transactions['date'].dt.dayofweek.astype(np.int16)
+        df['dow'] = df['date'].dt.dayofweek.astype(np.int16)
+        period = 'dow'
+    
+    if 'quarter' in feature:
+        df_transactions['quarter'] = df_transactions['date'].dt.quarter.astype(np.int16)
+        df['quarter'] = df['date'].dt.quarter.astype(np.int16)
+        period = 'quarter'
+    
+    if 'mon' in feature:
+        df_transactions['mon'] = df_transactions['date'].dt.month.astype(np.int16)
+        df['mon'] = df['date'].dt.month.astype(np.int16)
+        period = 'mon'
+
+    grouped  = df_transactions[['store_nbr',period,'transactions']].groupby(['store_nbr',period])
     if 'med' in feature:
-        df_out   = grouped['transactions'].median().reset_index()
+        df_out = grouped['transactions'].median().reset_index()
 
     if 'mean' in feature:
         df_out = grouped['transactions'].mean().reset_index()
 
     if 'std' in feature:
-        df_out= grouped['transactions'].std().reset_index()
+        df_out = grouped['transactions'].std().reset_index()
     
     if 'skew' in feature:
-        df_out= grouped['transactions'].apply(stats.skew).reset_index()
+        df_out = grouped['transactions'].apply(stats.skew).reset_index()
     
     if 'kurtosis' in feature:
-        df_out= grouped['transactions'].apply(stats.kurtosis).reset_index()
+        df_out = grouped['transactions'].apply(stats.kurtosis).reset_index()
     
     if 'hm' in feature:
-        df_out= grouped['transactions'].apply(stats.hmean).reset_index()
+        df_out = grouped['transactions'].apply(stats.hmean).reset_index()
     
     if '10pct' in feature:
-        df_out= grouped['transactions'].quantile(0.1).reset_index()
+        df_out = grouped['transactions'].quantile(0.1).reset_index()
     
     if '90pct' in feature:
-        df_out= grouped['transactions'].quantile(0.9).reset_index()
+        df_out = grouped['transactions'].quantile(0.9).reset_index()
 
     df_out.rename(columns={'transactions':feature},inplace=True)
-    df_feature = pd.merge(df[['year','mon','store_nbr']], df_out, on=['year','mon','store_nbr'], how='left')
+    df_feature = pd.merge(df[['store_nbr',period]], df_out, on=['store_nbr',period], how='left')
     return df_feature[feature]
  
 def sales_feature(df, feature):
@@ -131,12 +147,24 @@ def sales_feature(df, feature):
         df_train = pickle.load(f)
     df_train['date'] = pd.to_datetime(df_train['date'])
     df_train['year'] = df_train['date'].dt.year.astype(np.int16)
-    df_train['mon'] = df_train['date'].dt.month.astype(np.int8)
+    df['year'] = df['date'].dt.year.astype(np.int16)
+    period = 'year'
+    if 'dow' in feature:
+        df_train['dow'] = df_train['date'].dt.dayofweek.astype(np.int16)
+        df['dow'] = df['date'].dt.dayofweek.astype(np.int16)
+        period = 'dow'
     
-    df['year'] = pd.to_datetime(df['date']).dt.year.astype(np.int16)
-    df['mon'] = pd.to_datetime(df['date']).dt.month.astype(np.int8)
+    if 'quarter' in feature:
+        df_train['quarter'] = pd.to_datetime(df_train['date']).dt.quarter.astype(np.int16)
+        df['quarter'] = pd.to_datetime(df['date']).dt.quarter.astype(np.int16)
+        period = 'quarter'
+    
+    if 'mon' in feature:
+        df_train['mon'] = pd.to_datetime(df_train['date']).dt.month.astype(np.int16)
+        df['mon'] = pd.to_datetime(df['date']).dt.month.astype(np.int16)
+        period = 'mon'
 
-    grouped  = df_train.groupby(['year','mon','item_nbr'])
+    grouped  = df_train[['store_nbr','item_nbr',period,'unit_sales']].groupby(['item_nbr','store_nbr',period])
     if 'med' in feature:
         df_out = grouped['unit_sales'].median().reset_index()
 
@@ -156,21 +184,129 @@ def sales_feature(df, feature):
         df_out = grouped['unit_sales'].apply(stats.hmean).reset_index()
     
     if '10pct' in feature:
-        df_out= grouped['unit_sales'].quantile(0.1).reset_index()
+        #df_out = grouped['unit_sales'].quantile(0.1).reset_index() # very slow
+        df_out = grouped['unit_sales'].apply(lambda x: np.percentile(x, q=10)).reset_index()
     
     if '90pct' in feature:
-        df_out= grouped['unit_sales'].quantile(0.9).reset_index()
-
+        #df_out = grouped['unit_sales'].quantile(0.9).reset_index()
+        df_out = grouped['unit_sales'].apply(lambda x: np.percentile(x, q=90)).reset_index()
+        
     df_out.rename(columns={'unit_sales':feature},inplace=True)
-    df_feature = pd.merge(df[['year','mon','item_nbr']], df_out, on=['year','mon','item_nbr'], how='left')
+    df_feature = pd.merge(df[[period,'item_nbr','store_nbr']], df_out, on=[period,'item_nbr','store_nbr'], how='left')
+    return df_feature[feature]
+
+# moving average
+def ma_feature(df, feature):
+    with open(path.join(config.proc_data_path,config.fname_train+'.pkl'),'rb') as f:
+        df_train = pickle.load(f)
+    df_train['date'] = pd.to_datetime(df_train['date'])
+    with open(path.join(config.proc_data_path,config.fname_items+'.pkl'),'rb') as f:
+        df_items = pickle.load(f)
+    df_train = pd.merge(df_train, df_items, how='left', on=['item_nbr'])
+    df = pd.merge(df, df_items, how='left', on=['item_nbr'])
+    df_train['date'] = pd.to_datetime(df_train['date'])
+    df['date'] = pd.to_datetime(df['date'])
+
+    mlist = ['store_nbr']
+    if 'ma_is' in feature:
+        mlist.append('item_nbr')
+    if 'ma_cs' in feature:
+        mlist.append('class')
+    if 'ma_fs' in feature:
+        mlist.append('family')
+        
+    flist = mlist.copy()
+    flist.append('unit_sales')
+    
+    if 'tot' in feature:
+        ma = df_train[flist].groupby(mlist)['unit_sales'].mean().to_frame(feature).reset_index()
+    else:
+        ndays = feature.split('_')[-1]
+        last_date = df_train.iloc[df_train.shape[0]-1].date
+        print('ndays = ',ndays)
+        print('last_date = ',last_date)
+        print('date = ',last_date-timedelta(int(ndays)))
+        tmp = df_train[df_train.date>last_date-timedelta(int(ndays))]
+        print('tmp.shape = ',tmp.shape)
+        print(tmp.head(5))
+        print(tmp.info())
+        ma = tmp[flist].groupby(mlist)['unit_sales'].mean().to_frame(feature).reset_index()
+
+    df_feature = pd.merge(df, ma, on=mlist, how='left')
+    return df_feature[feature]
+
+def ma_wt(df, feature):
+    with open(path.join(config.proc_data_path,config.fname_train+'.pkl'),'rb') as f:
+        df_train = pickle.load(f)
+    df_train['date'] = pd.to_datetime(df_train['date'])
+    with open(path.join(config.proc_data_path,config.fname_items+'.pkl'),'rb') as f:
+        df_items = pickle.load(f)
+    df_train = pd.merge(df_train, df_items, how='left', on=['item_nbr'])
+    df = pd.merge(df, df_items, how='left', on=['item_nbr'])
+    df_train['date'] = pd.to_datetime(df_train['date'])
+    df['date'] = pd.to_datetime(df['date'])
+    df_train['dow'] = df_train['date'].dt.dayofweek
+    df['dow'] = df['date'].dt.dayofweek
+
+    mlist = ['store_nbr']
+    if 'ma_is' in feature:
+        mlist.append('item_nbr')
+    if 'ma_cs' in feature:
+        mlist.append('class')
+    if 'ma_fs' in feature:
+        mlist.append('family')
+
+    flist = mlist.copy()
+    flist.append('unit_sales')
+
+    ma = df_train[flist].groupby(mlist)['unit_sales'].mean().to_frame('ma')
+    
+    mlist_dw = mlist.copy()
+    mlist_dw.append('dow') 
+    flist_dw = flist.copy()
+    flist_dw.append('dow')
+
+    lastdate = df_train.iloc[df_train.shape[0]-1].date
+    ma_dw = df_train[flist_dw].groupby(mlist_dw)['unit_sales'].mean().to_frame('ma_dw')
+    ma_dw.reset_index(inplace=True)
+
+    for i in [112,56,28,14,7,3,1]:
+        tmp = df_train[df_train.date>lastdate-timedelta(int(i))]
+        tmpg = tmp.groupby(mlist)['unit_sales'].mean().to_frame(feature+str(i))
+        ma = ma.join(tmpg, how='left')
+    del tmp, tmpg
+    gc.collect()
+
+    flist_wk = mlist_dw.copy()
+    flist_wk.append('ma_dw')
+    print(ma_dw.head(5))
+    ma_wk = ma_dw[flist_wk].groupby(mlist)['ma_dw'].mean().to_frame('ma_wk')
+    ma_wk.reset_index(inplace=True)
+    ma['ma'] = ma.median(axis=1)
+    ma.reset_index(inplace=True)
+
+    df_feature = pd.merge(df,         ma,    how='left', on=mlist)
+    df_feature = pd.merge(df_feature, ma_wk, how='left', on=mlist)
+    df_feature = pd.merge(df_feature, ma_dw, how='left', on=mlist_dw)
+    df_feature[feature] = df_feature.ma
+    pos_idx = df_feature['ma_wk'] > 0
+    df_pos = df_feature.loc[pos_idx]
+    df_feature.loc[pos_idx, feature] = df_pos['ma'] * df_pos['ma_dw'] / df_pos['ma_wk']
+    df_feature.loc[:,feature].fillna(0, inplace=True)
+
     return df_feature[feature]
 
 def oil_feature(df, feature):
     with open(path.join(config.proc_data_path,config.fname_oil+'.pkl'),'rb') as f:
         df_oil = pickle.load(f)
+    df_oil['date'] = pd.to_datetime(df_oil['date'])
+    df_oil['dcoilwtico'].interpolate(inplace=True)
     df_feature = pd.merge(df[['date']], df_oil, on=['date'], how='left')
+    print(df.info())
+    print(df_oil.info())
+    print(df_feature.info())
+    print(df_feature.head(5))
     return df_feature[feature]
-
 
 def item_sold_days(df, feature):
     df[feature] = pd.to_datetime(df['date']) - pd.to_datetime(df['item_start_date'])
@@ -181,104 +317,3 @@ def get_prev(df,period_index,prevperiod_index,name):
     df_prev.columns.rename(columns={period_index:prevperiod_index,'unite_sales':name}, inplace=True)
     return df_prev
 
-def prevperiod(df_test, df, feature):
-    period = 'quarter'
-    if 'month' in feature:
-        period = 'month'
-    if 'halfyear' in feature:
-        period = 'halfyear'
-    if 'year' in feature:
-        period = 'year'
-    
-    grp_tag = feature.split('_')[-1]
-    print('grp_tag = ',grp_tag)
-
-    df['quarter'] = pd.to_datetime(df['date']).dt.quarter
-    df_test['quarter'] = pd.to_datetime(df_test['date']).dt.quarter
-    if 'year' not in df.columns:
-        df['year'] = pd.to_datetime(df['date']).dt.year
-        df_test['year'] = pd.to_datetime(df_test['date']).dt.year
-    if 'month' not in df.columns:
-        df['month'] = pd.to_datetime(df['date']).dt.month
-        df_test['month'] = pd.to_datetime(df_test['date']).dt.month
-    if 'day' not in df.columns:
-        df['day'] = pd.to_datetime(df['date']).dt.day
-        df_test['day'] = pd.to_datetime(df_test['date']).dt.day
-
-    period_index = period + '_index'
-    prevperiod_index = 'prev' + period + '_index'
-
-    if period=='month':
-        df[period_index] = df['year']*12 + df['month']-1
-        df_test[period_index] = df_test['year']*12 + df_test['month']-1
-
-    if period=='quarter':
-        df[period_index] = df['year']*4 + df['quarter']-1
-        df_test[period_index] = df_test['year']*4 + df_test['quarter']-1
-
-    if period=='halfyear':
-        df[period_index] = df['year']*2 + np.floor((df['quarter']-1)/2)
-        df_test[period_index] = df_test['year']*2 + np.floor((df_test['quarter']-1)/2)
-
-    if period=='year':
-        df[period_index] = df['year']
-        df_test[period_index] = df_test['year']
-
-    df[prevperiod_index] = df[period_index] - 1
-    df_test[prevperiod_index] = df_test[period_index] - 1
-
-    grp_list = []
-    if 'd' in grp_tag:
-        grp_list.append('day')
-    if 'p' in grp_tag:
-        grp_list.append('onpromotion')
-    if 'h' in grp_tag:
-        grp_list.append('locale')
-    if 's' in grp_tag:
-        grp_list.append('store_nbr')
-
-    grouped = df.groupby(grp_list)
-    df_med   = grouped['unit_sales'].median().reset_index()
-    df_mean  = grouped['unit_sales'].mean().reset_index()
-    df_std   = grouped['unit_sales'].std().reset_index()
-    df_skew  = grouped['unit_sales'].apply(stats.skew).reset_index()
-    df_kurt  = grouped['unit_sales'].apply(stats.kurtosis).reset_index()
-    df_hmean = grouped['unit_sales'].apply(stats.hmean).reset_index()
-    df_10pct = grouped['unit_sales'].quantile(0.1).reset_index()
-    df_90pct = grouped['unit_sales'].quartile(0.9).reset_index()
-
-    name_med = 'prev_' + period + '_' + grp_tag + '_med'
-    df_prev_med = get_prev(df_med,period_index,prevperiod_index,name_med)    
-
-    name_mean = 'prev_' + period + '_' + grp_tag + '_mean'
-    df_prev_mean = get_prev(df_mean,period_index,prevperiod_index,name_mean)    
-    
-    name_std = 'prev_' + period + '_' + grp_tag + '_std'
-    df_prev_std = get_prev(df_std,period_index,prevperiod_index,name_std)    
-
-    name_skew = 'prev_' + period + '_' + grp_tag + '_skew'
-    df_prev_skew = get_prev(df_skew,period_index,prevperiod_index,name_skew)    
-    
-    name_kurt = 'prev_' + period + '_' + grp_tag + '_kurt'
-    df_prev_kurt = get_prev(df_kurt,period_index,prevperiod_index,name_kurt)    
-
-    name_hmean = 'prev_' + period + '_' + grp_tag + '_hmean'
-    df_prev_hmean = get_prev(df_hmean,period_index,prevperiod_index,name_hmean)
-
-    name_10pct = 'prev_' + period + '_' + grp_tag + '_10pct'
-    df_prev_10pct = get_prev(df_10pct,period_index,prevperiod_index,name_10pct)    
-    
-    name_90pct = 'prev_' + period + '_' + grp_tag + '_90pct'
-    df_prev_90pct = get_prev(df_90pct,period_index,prevperiod_index,name_90pct)    
-    
-
-    df_ret = pd.merge(df_test,df_prev_med,on=[prevperiod_index],how='left')
-    df_ret = pd.merge(df_ret,df_prev_mean,on=[prevperiod_index],how='left')
-    df_ret = pd.merge(df_ret,df_prev_std,on=[prevperiod_index],how='left')
-    df_ret = pd.merge(df_ret,df_prev_skew,on=[prevperiod_index],how='left')
-    df_ret = pd.merge(df_ret,df_prev_kurt,on=[prevperiod_index],how='left')
-    df_ret = pd.merge(df_ret,df_prev_hmean,on=[prevperiod_index],how='left')
-    df_ret = pd.merge(df_ret,df_prev_10pct,on=[prevperiod_index],how='left')
-    df_ret = pd.merge(df_ret,df_prev_90pct,on=[prevperiod_index],how='left')
-
-    return df_ret
