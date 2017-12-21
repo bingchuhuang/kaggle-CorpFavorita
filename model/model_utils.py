@@ -34,12 +34,11 @@ XGBoost
 
 def run_xgb(par_list, nround, df_train, y_train, output_fname):
     param = par_list
-    num_round = 100
     dtrain = xgb.DMatrix(df_train, label=y_train)
     bst = xgb.train(
         param,
         dtrain,
-        num_round
+        nround
     )
     bst.save_model(output_fname)
 
@@ -85,6 +84,7 @@ def predict_xgb(saved_model_fname, df_test):
     bst = xgb.Booster({'nthread':4})
     bst.load_model(saved_model_fname)
     preds = bst.predict(dtest)
+    bst.dump_model('dump.raw.txt')
 
     return preds
 
